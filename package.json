@@ -2,7 +2,7 @@
   "name": "narravo",
   "version": "1.0.0",
   "type": "module",
-  "description": "A simple browser extension for text-to-speech using Azure's API.",
+  "description": "A refined text-to-speech solution using Azure's Neural TTS API.",
   "scripts": {
     "dev": "wxt",
     "watch": "wxt",

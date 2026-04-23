@@ -14,7 +14,7 @@ Use this document when filling out the **Privacy practices** tab on the Chrome W
 
 ### `activeTab`
 
-> Narravo uses `activeTab` to identify the current browser tab when the user triggers a keyboard shortcut (Alt+Shift+L). The extension sends a message to the already-injected content script in that tab to retrieve the user's text selection and initiate playback. No browsing history or tab metadata is collected or transmitted.
+> Narravo uses `activeTab` to temporarily access the current browser tab only when the user performs an explicit gesture: pressing a keyboard shortcut (Alt+Shift+L or Alt+Shift+S), selecting the context menu item, or clicking the extension icon. The extension dynamically injects its content script into that tab to display the playback controls and read the selected text. `activeTab` does not grant persistent access to any website, and no browsing history or tab metadata is collected or transmitted.
 
 ### `contextMenus`
 

@@ -45,8 +45,16 @@ export default defineConfig({
       },
     ],
   },
+  hooks: {
+    'build:manifestGenerated': (_wxt, manifest) => {
+      // Remove declarative content_scripts to avoid broad host permissions.
+      // The content script is injected on-demand via activeTab + scripting
+      // when the user triggers a keyboard shortcut or context menu.
+      delete (manifest as any).content_scripts;
+    },
+  },
   // WXT 0.20+ uses 'webExt' for browser execution control.
-  // 'disabled: true' stops WXT from trying to find/launch a browser, 
+  // 'disabled: true' stops WXT from trying to find/launch a browser,
   // avoiding "File path cannot be resolved" errors especially with Flatpak/Snap.
   webExt: {
     disabled: true,

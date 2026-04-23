@@ -1,6 +1,6 @@
 # Narravo
 
-A powerful, minimalist browser extension for text-to-speech using Azure's Speech API. Built with React and the WXT framework.
+A refined text-to-speech solution using Azure's Neural TTS API. Built with React and the WXT framework.
 
 ## Key Features
 

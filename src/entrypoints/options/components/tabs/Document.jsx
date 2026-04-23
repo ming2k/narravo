@@ -66,9 +66,9 @@ export function Document() {
         <StepContent>
           <p>To use Narravo, you need an Azure Speech Service key:</p>
           <ul>
-            <li>Visit the <a href="https://speech.microsoft.com/portal/voicegallery" target="_blank" rel="noopener noreferrer">Azure Voice Gallery</a></li>
+            <li>Go to <a href="https://ai.azure.com" target="_blank" rel="noopener noreferrer">Azure AI Foundry</a></li>
             <li>Sign in with your Microsoft account</li>
-            <li>Apply for an API key</li>
+            <li>Create or open a <strong>Speech</strong> resource</li>
           </ul>
         </StepContent>
       </StepItem>
@@ -78,15 +78,15 @@ export function Document() {
       <StepItem>
         <StepTitle>2. Locate Your Credentials</StepTitle>
         <StepContent>
-          <p>Find your credentials in the Azure Voice Gallery:</p>
+          <p>Find your credentials on the resource Overview page:</p>
           <ImageContainer>
             <Image
-              src="/assets/azure-api-voice-gallery-interface-info-mark.png"
-              alt="Azure Voice Gallery credentials"
+              src="/assets/where-are-key-and-region.png"
+              alt="Azure AI Foundry Overview showing API Key and Region"
             />
           </ImageContainer>
           <Alert variant="info" style={{ marginTop: 12 }}>
-            The &quot;Region&quot; (e.g., japanwest) is your Azure Region. The &quot;Resource key&quot; is your Azure Speech Key. Keep these secure.
+            <strong>API Key</strong> is under <em>Endpoints and keys</em>. <strong>Region</strong> is the <em>Location</em> value in <em>Resource details</em> (e.g. <code>eastus2</code>).
           </Alert>
         </StepContent>
       </StepItem>

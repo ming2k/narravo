@@ -181,7 +181,7 @@ export function About() {
           <StepItem>
             <StepTitle>1. Get Azure Speech Service</StepTitle>
             <StepContent>
-              <p>Visit the <a href="https://speech.microsoft.com/portal/voicegallery" target="_blank" rel="noopener noreferrer">Azure Voice Gallery</a>, sign in, and apply for an API key.</p>
+              <p>Go to <a href="https://ai.azure.com" target="_blank" rel="noopener noreferrer">Azure AI Foundry</a>, sign in, and create a <strong>Speech</strong> resource.</p>
             </StepContent>
           </StepItem>
 
@@ -190,12 +190,12 @@ export function About() {
             <StepContent>
               <ImageContainer>
                 <Image
-                  src="/assets/azure-api-voice-gallery-interface-info-mark.png"
-                  alt="Azure Voice Gallery credentials"
+                  src="/assets/where-are-key-and-region.png"
+                  alt="Azure AI Foundry Overview showing API Key and Region"
                 />
               </ImageContainer>
               <Alert variant="info" style={{ marginTop: 10 }}>
-                The &quot;Region&quot; is your Azure Region. The &quot;Resource key&quot; is your Azure Speech Key.
+                <strong>API Key</strong> is under <em>Endpoints and keys</em>. <strong>Region</strong> is the <em>Location</em> value in <em>Resource details</em>.
               </Alert>
             </StepContent>
           </StepItem>
