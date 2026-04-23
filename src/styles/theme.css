@@ -1,0 +1,255 @@
+/* Narravo Design System - Unified Theme Tokens */
+
+:root {
+  /* --- Zinc Color Scale (Light Mode) --- */
+  --zinc-50:  #FAFAFA;
+  --zinc-100: #F4F4F5;
+  --zinc-200: #E4E4E7;
+  --zinc-300: #D4D4D8;
+  --zinc-400: #A1A1AA;
+  --zinc-500: #71717A;
+  --zinc-600: #52525B;
+  --zinc-700: #3F3F46;
+  --zinc-800: #27272A;
+  --zinc-900: #18181B;
+  --zinc-950: #09090B;
+
+  /* --- Backgrounds --- */
+  --bg-window:         var(--zinc-50);
+  --bg-surface:        #FFFFFF;
+  --bg-surface-hover:  var(--zinc-100);
+  --bg-elevated:       #FFFFFF;
+  --bg-sunken:         var(--zinc-100);
+  --bg-secondary:      var(--zinc-100);
+  --bg-tertiary:       var(--zinc-200);
+
+  /* --- Text Colors --- */
+  --text-primary:      var(--zinc-900);
+  --text-secondary:    var(--zinc-600);
+  --text-tertiary:     var(--zinc-500);
+  --text-placeholder:  var(--zinc-400);
+  --text-inverse:      #FFFFFF;
+
+  /* --- Primary Action Colors (Zinc-based, not blue) --- */
+  --bg-primary:        var(--zinc-900);
+  --bg-primary-hover:  var(--zinc-800);
+
+  /* --- System Colors --- */
+  --system-blue:       #2563EB;
+  --system-blue-hover: #1D4ED8;
+  --system-blue-light: rgba(37, 99, 235, 0.1);
+  --system-green:      #16A34A;
+  --system-green-hover:#15803D;
+  --system-green-light:rgba(22, 163, 74, 0.1);
+  --system-red:        #DC2626;
+  --system-red-hover:  #B91C1C;
+  --system-red-light:  rgba(220, 38, 38, 0.1);
+  --system-amber:      #D97706;
+  --system-amber-light:rgba(217, 119, 6, 0.1);
+
+  /* --- Borders --- */
+  --border-color:      var(--zinc-200);
+  --border-strong:     var(--zinc-300);
+  --border-focus:      var(--zinc-500);
+
+  /* --- Shadows (Multi-layer soft shadows) --- */
+  --shadow-none:  none;
+  --shadow-sm:    0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-md:    0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg:    0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --shadow-xl:    0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+
+  /* --- Radius --- */
+  --radius-none: 0px;
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-pill: 999px;
+
+  /* --- Transitions --- */
+  --transition-fast:   0.12s ease;
+  --transition-base:   0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* --- Backgrounds --- */
+    --bg-window:         var(--zinc-950);
+    --bg-surface:        var(--zinc-900);
+    --bg-surface-hover:  var(--zinc-800);
+    --bg-elevated:       var(--zinc-800);
+    --bg-sunken:         #000000;
+    --bg-secondary:      var(--zinc-800);
+    --bg-tertiary:       var(--zinc-700);
+
+    /* --- Text Colors --- */
+    --text-primary:      var(--zinc-100);
+    --text-secondary:    var(--zinc-400);
+    --text-tertiary:     var(--zinc-500);
+    --text-placeholder:  var(--zinc-600);
+    --text-inverse:      var(--zinc-900);
+
+    /* --- Primary Action Colors (Zinc-based, not blue) --- */
+    --bg-primary:        var(--zinc-100);
+    --bg-primary-hover:  var(--zinc-200);
+
+    /* --- System Colors --- */
+    --system-blue:       #3B82F6;
+    --system-blue-hover: #60A5FA;
+    --system-blue-light: rgba(59, 130, 246, 0.15);
+    --system-green:      #22C55E;
+    --system-green-hover:#4ADE80;
+    --system-green-light:rgba(34, 197, 94, 0.15);
+    --system-red:        #EF4444;
+    --system-red-hover:  #F87171;
+    --system-red-light:  rgba(239, 68, 68, 0.15);
+    --system-amber:      #F59E0B;
+    --system-amber-light:rgba(245, 158, 11, 0.15);
+
+    /* --- Borders --- */
+    --border-color:      var(--zinc-800);
+    --border-strong:     var(--zinc-700);
+    --border-focus:      var(--zinc-400);
+
+    /* --- Shadows --- */
+    --shadow-sm:    0 1px 2px 0 rgba(0, 0, 0, 0.2);
+    --shadow-md:    0 4px 6px -1px rgba(0, 0, 0, 0.25), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+    --shadow-lg:    0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.25);
+    --shadow-xl:    0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* --- Global Base Styles --- */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-window);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Base Input Styles --- */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select,
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-placeholder);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--border-focus);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--bg-sunken);
+}
+
+/* --- Base Button Styles --- */
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-primary);
+  color: var(--text-inverse);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+button:hover:not(:disabled) {
+  background-color: var(--bg-primary-hover);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Typography Scale --- */
+h1 { font-size: 28px; font-weight: 700; margin: 0 0 16px 0; letter-spacing: -0.02em; line-height: 1.2; }
+h2 { font-size: 22px; font-weight: 600; margin: 0 0 12px 0; letter-spacing: -0.015em; line-height: 1.25; }
+h3 { font-size: 17px; font-weight: 600; margin: 0 0 8px 0; letter-spacing: -0.01em; line-height: 1.3; }
+p  { margin: 0 0 16px 0; color: var(--text-secondary); line-height: 1.6; }
+
+/* --- Range Input Base --- */
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+  outline: none;
+  border: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 2px solid var(--system-blue);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: var(--shadow-md);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 2px solid var(--system-blue);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
