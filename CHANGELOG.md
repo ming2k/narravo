@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.1] - 2026-04-23
+
+### Changed
+
+- **Remove broad host permissions** — Eliminated declarative `content_scripts` with `matches: ["<all_urls>"]` from the manifest. The content script is now injected on-demand via `activeTab` + `scripting` when the user triggers a keyboard shortcut or context menu, avoiding Chrome Web Store's broad-permission warning.
+- **Update project description** — Changed to "A refined text-to-speech solution" across the manifest, README, and package metadata.
+- **Update Azure setup docs** — Replaced outdated Azure Voice Gallery references and screenshots in Options pages (About, Document) with the current [Azure AI Foundry](https://ai.azure.com) portal guidance.
+
+### Fixed
+
+- Broken image references in About and Document tabs now point to the correct `where-are-key-and-region.png` asset.
+
 ## [1.0.0] - 2026-04-23
 
 ### Added
