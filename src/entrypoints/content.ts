@@ -14,6 +14,7 @@ export default defineContentScript({
     let lastRequest: any = null;
     let abortController: AbortController | null = null;
     let state = "idle"; // idle | loading | playing | paused | ended | error
+    let offscreenHasCache = false;
 
     // Initialize on load
     initMiniWindow();
@@ -60,9 +61,11 @@ export default defineContentScript({
     function updateUI() {
       if (!miniWindow) return;
 
+      // For offscreen path, we rely on background telling us hasCache via UPDATE_UI_STATE.
+      // For fallback path, we check the local player.
       const player = audioService;
       const hasCachedAudio = player?.hasCachedAudio?.() || false;
-      const canReplay = hasCachedAudio || Boolean(lastRequest);
+      const canReplay = hasCachedAudio || offscreenHasCache || Boolean(lastRequest);
 
       miniWindow.updateStatus({ state, canReplay });
     }
@@ -72,15 +75,34 @@ export default defineContentScript({
         miniWindow = createMiniWindow();
         miniWindow.replayButton.addEventListener("click", handleControlClick);
         miniWindow.closeButton.addEventListener("click", handleClose);
-        document.body.appendChild(miniWindow.container);
+
+        if (document.body) {
+          document.body.appendChild(miniWindow.container);
+        } else {
+          // Body not ready yet (rare), wait for it
+          console.warn("[Narravo] document.body not ready, deferring miniwindow mount");
+          const observer = new MutationObserver(() => {
+            if (document.body) {
+              observer.disconnect();
+              if (miniWindow) {
+                document.body.appendChild(miniWindow.container);
+              }
+            }
+          });
+          observer.observe(document.documentElement, { childList: true });
+        }
       }
-      miniWindow.container.style.display = "flex";
-      updateUI();
+      if (miniWindow?.container) {
+        miniWindow.container.style.display = "flex";
+        miniWindow.container.classList.add("is-visible");
+        updateUI();
+      }
     }
 
     function hideMiniWindow() {
       if (miniWindow) {
         miniWindow.container.style.display = "none";
+        miniWindow.container.classList.remove("is-visible");
       }
     }
 
@@ -88,7 +110,8 @@ export default defineContentScript({
       e.stopPropagation();
       e.preventDefault();
 
-      await stopAudio();
+      // Notify background to stop audio (works for both offscreen and fallback)
+      await browser.runtime.sendMessage({ type: "STOP_AUDIO" });
       lastRequest = null;
 
       if (miniWindow) {
@@ -96,6 +119,7 @@ export default defineContentScript({
         miniWindow.container.remove();
         miniWindow = null;
       }
+      state = "idle";
     }
 
     async function handleControlClick(e: MouseEvent) {
@@ -104,34 +128,21 @@ export default defineContentScript({
 
       if (state === "loading") return;
 
-      const player = getAudioService();
-
-      // Playing -> Pause
       if (state === "playing") {
-        player.pauseAudio();
-        setState("paused");
+        await browser.runtime.sendMessage({ type: "PAUSE_AUDIO" });
         return;
       }
 
-      // Paused -> Resume
-      if (state === "paused" && player.isPaused()) {
-        try {
-          await player.resumeAudio();
-          setState("playing");
-        } catch (err) {
-          console.error("[Narravo] Resume failed:", err);
-          setState("error");
-        }
+      if (state === "paused") {
+        await browser.runtime.sendMessage({ type: "RESUME_AUDIO" });
         return;
       }
 
-      // Ended/Idle -> Replay from cache or new request
-      if (player.hasCachedAudio()) {
-        await replayFromCache();
-      } else if (lastRequest) {
-        await playFromRequest(lastRequest);
-      }
+      // Ended / Idle -> Replay
+      await browser.runtime.sendMessage({ type: "REPLAY_AUDIO" });
     }
+
+    // --- Legacy Firefox fallback audio functions ---
 
     async function stopAudio() {
       if (abortController) {
@@ -169,7 +180,10 @@ export default defineContentScript({
           abortController.signal
         );
 
-        const playPromise = player.playStreamingResponse(response, request.settings.rate || 1);
+        const playPromise = player.playStreamingResponse(
+          response,
+          request.settings.rate || 1
+        );
 
         // Attach event listeners
         await attachAudioListeners(player);
@@ -249,7 +263,11 @@ export default defineContentScript({
           audio.addEventListener("timeupdate", () => {
             // Fallback end detection for Firefox
             const duration = audio.duration;
-            if (Number.isFinite(duration) && duration > 0 && audio.currentTime >= duration - 0.1) {
+            if (
+              Number.isFinite(duration) &&
+              duration > 0 &&
+              audio.currentTime >= duration - 0.1
+            ) {
               if (state !== "ended") {
                 setState("ended");
               }
@@ -265,7 +283,7 @@ export default defineContentScript({
 
           return true;
         }
-        await new Promise(r => setTimeout(r, 20));
+        await new Promise((r) => setTimeout(r, 20));
       }
       return false;
     }
@@ -279,15 +297,33 @@ export default defineContentScript({
         case "GET_SELECTED_TEXT":
           return { text: window.getSelection()?.toString() || "" };
 
-        case "PLAY_STREAMING_TTS":
+        // --- Offscreen UI messages ---
+        case "SHOW_UI": {
+          console.log("[Narravo] SHOW_UI received");
+          showMiniWindow();
+          return { success: true };
+        }
+
+        case "AUDIO_STATE":
+        case "UPDATE_UI_STATE": {
+          setState(request.state);
+          offscreenHasCache = request.hasCache ?? offscreenHasCache;
+          if (request.state === "ended" || request.state === "error") {
+            offscreenHasCache = true;
+          }
+          return { success: true };
+        }
+
+        // --- Firefox fallback: direct playback ---
+        case "PLAY_STREAMING_TTS": {
           try {
             showMiniWindow();
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise((r) => setTimeout(r, 50));
 
             lastRequest = {
               text: request.text,
               settings: request.settings,
-              credentials: request.credentials
+              credentials: request.credentials,
             };
 
             await playFromRequest(lastRequest);
@@ -298,8 +334,9 @@ export default defineContentScript({
             }
             return { success: false, error: err.message };
           }
+        }
 
-        case "STOP_AUDIO":
+        case "STOP_AUDIO": {
           await stopAudio();
           lastRequest = null;
           if (audioService) {
@@ -312,6 +349,37 @@ export default defineContentScript({
             miniWindow = null;
           }
           return { success: true };
+        }
+
+        // Control commands from background (Firefox fallback path)
+        case "PAUSE_AUDIO": {
+          const player = getAudioService();
+          player.pauseAudio();
+          setState("paused");
+          return { success: true };
+        }
+
+        case "RESUME_AUDIO": {
+          const player = getAudioService();
+          try {
+            await player.resumeAudio();
+            setState("playing");
+          } catch (err) {
+            console.error("[Narravo] Resume failed:", err);
+            setState("error");
+          }
+          return { success: true };
+        }
+
+        case "REPLAY_AUDIO": {
+          const player = getAudioService();
+          if (player.hasCachedAudio()) {
+            await replayFromCache();
+          } else if (lastRequest) {
+            await playFromRequest(lastRequest);
+          }
+          return { success: true };
+        }
       }
     });
 
@@ -325,5 +393,5 @@ export default defineContentScript({
 
     window.addEventListener("pagehide", handlePageExit);
     window.addEventListener("beforeunload", handlePageExit);
-  }
+  },
 });

@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.2] - 2026-04-23
+
+### Added
+
+- **Offscreen Document audio playback** (Chrome MV3) — Audio is now played inside a dedicated offscreen document instead of the page's content script. This eliminates playback failures on CSP-strict sites (e.g., GitHub, Twitter/X) and avoids page-environment restrictions entirely.
+- **Cross-browser audio bridge** — Background script routes all playback commands to the offscreen document on Chrome, while Firefox/MV2 continues to use the legacy content-script-based playback as a fallback.
+
+### Changed
+
+- **Mini Window is now a pure remote control** — The floating UI no longer creates `HTMLAudioElement` or `MediaSource` directly. It sends control commands (`PLAY_AUDIO`, `PAUSE_AUDIO`, `RESUME_AUDIO`, `STOP_AUDIO`, `REPLAY_AUDIO`) to the background script and updates its visual state based on broadcasted `AUDIO_STATE` / `UPDATE_UI_STATE` messages.
+- **Popup playback is unified** — The popup no longer instantiates its own `AudioService`. It reuses the same offscreen (or fallback) player as the mini window, ensuring state consistency across all surfaces.
+- **Manifest permissions** — Added `'offscreen'` permission for Chrome; automatically excluded for Firefox builds.
+
+### Fixed
+
+- **Context menu missing content-script injection** — Right-click "Read selected text" now ensures the content script is loaded before requesting UI display, preventing the mini window from silently failing to appear.
+- **Mini window mount race condition** — Added safeguard for `document.body` not being ready at the moment of mount; the observer now waits for `<body>` to exist before appending the floating widget.
+
 ## [1.0.1] - 2026-04-23
 
 ### Changed

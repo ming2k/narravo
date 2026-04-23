@@ -1,6 +1,66 @@
 import { getSettings } from "../utils/settingsStorage";
 import { defaultSettings } from "../types/storage";
 
+const OFFSCREEN_PATH = "offscreen.html";
+let creatingOffscreen: Promise<void> | null = null;
+let currentAudioState = { state: "idle", hasCache: false };
+let activeTabId: number | null = null;
+
+const supportsOffscreen =
+  typeof chrome !== "undefined" && !!chrome.offscreen;
+
+async function hasOffscreenDocument(): Promise<boolean> {
+  if ((chrome.runtime as any).getContexts) {
+    const contexts = await (chrome.runtime as any).getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"],
+      documentUrls: [chrome.runtime.getURL(OFFSCREEN_PATH)],
+    });
+    return contexts.length > 0;
+  }
+  // Fallback for older Chrome versions
+  try {
+    await chrome.runtime.sendMessage({ type: "OFFSCREEN_PING" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function setupOffscreenDocument(): Promise<void> {
+  if (await hasOffscreenDocument()) return;
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+    return;
+  }
+  creatingOffscreen = chrome.offscreen
+    .createDocument({
+      url: OFFSCREEN_PATH,
+      reasons: ["AUDIO_PLAYBACK"] as any,
+      justification:
+        "Play text-to-speech audio independently of page environments to avoid CSP and sandbox restrictions",
+    })
+    .then(() => {})
+    .catch((err: any) => {
+      if (err?.message?.includes("Only one offscreen document")) return;
+      throw err;
+    });
+  await creatingOffscreen;
+  creatingOffscreen = null;
+}
+
+function broadcastState(state: string, hasCache: boolean = false) {
+  currentAudioState = { state, hasCache };
+  if (activeTabId != null) {
+    browser.tabs
+      .sendMessage(activeTabId, {
+        type: "UPDATE_UI_STATE",
+        state,
+        hasCache,
+      })
+      .catch(() => {});
+  }
+}
+
 export default defineBackground(() => {
   console.log("[Narravo] Background script loaded/reloaded");
 
@@ -27,7 +87,9 @@ export default defineBackground(() => {
     const envRegion = import.meta.env.VITE_AZURE_REGION;
 
     if (envKey && envRegion) {
-      console.log("[Narravo] Dev mode: Found Azure credentials in environment variables");
+      console.log(
+        "[Narravo] Dev mode: Found Azure credentials in environment variables"
+      );
       getSettings().then(async (settings) => {
         if (!settings.azureKey || !settings.azureRegion) {
           await browser.storage.local.set({
@@ -38,10 +100,14 @@ export default defineBackground(() => {
             },
             onboardingCompleted: true,
           });
-          console.log("[Narravo] Dev mode: Auto-initialized settings and completed onboarding");
+          console.log(
+            "[Narravo] Dev mode: Auto-initialized settings and completed onboarding"
+          );
         } else {
           // Even if settings already exist, ensure onboarding is marked completed
-          const { onboardingCompleted } = await browser.storage.local.get("onboardingCompleted");
+          const { onboardingCompleted } = await browser.storage.local.get(
+            "onboardingCompleted"
+          );
           if (!onboardingCompleted) {
             await browser.storage.local.set({ onboardingCompleted: true });
             console.log("[Narravo] Dev mode: Marked onboarding as completed");
@@ -95,29 +161,132 @@ export default defineBackground(() => {
     }
   });
 
-  // Listen for messages from popup to open options
-  browser.runtime.onMessage.addListener((message) => {
-    if (message.type === "OPEN_OPTIONS") {
-      browser.tabs.create({
-        url: browser.runtime.getURL("/options.html"),
-      });
+  // Unified message listener
+  browser.runtime.onMessage.addListener(async (message, sender) => {
+    switch (message.type) {
+      case "AUDIO_STATE": {
+        broadcastState(message.state, message.hasCache ?? false);
+        return;
+      }
+
+      case "GET_AUDIO_STATE": {
+        return {
+          state: currentAudioState.state,
+          hasCache: currentAudioState.hasCache,
+        };
+      }
+
+      case "PLAY_AUDIO": {
+        const text = message.text as string;
+        const tabId =
+          (message.tabId as number | undefined) ?? (sender.tab?.id ?? null);
+        await processTTSAudio(text, tabId);
+        return { success: true };
+      }
+
+      case "PAUSE_AUDIO":
+      case "RESUME_AUDIO":
+      case "STOP_AUDIO":
+      case "REPLAY_AUDIO": {
+        const action = message.type.replace(
+          "_AUDIO",
+          ""
+        ) as "PAUSE" | "RESUME" | "STOP" | "REPLAY";
+        await sendAudioControl(action);
+        return { success: true };
+      }
+
+      case "OPEN_OPTIONS": {
+        browser.tabs.create({
+          url: browser.runtime.getURL("/options.html"),
+        });
+        return;
+      }
     }
   });
 
   // Unified function to handle TTS requests
-  async function processTTS(text: string, tabId: number) {
-    try {
-      const settings = await getSettings();
+  async function processTTSAudio(text: string, tabId: number | null) {
+    const settings = await getSettings();
 
-      if (!settings.azureKey || !settings.azureRegion) {
-        await showNotification(
-          "Configuration Error",
-          "Azure credentials not configured. Please check your settings.",
-        );
-        return;
+    if (!settings.azureKey || !settings.azureRegion) {
+      await showNotification(
+        "Configuration Error",
+        "Azure credentials not configured. Please check your settings."
+      );
+      return;
+    }
+
+    activeTabId = tabId;
+
+    if (supportsOffscreen) {
+      try {
+        await setupOffscreenDocument();
+        if (tabId != null) {
+          try {
+            await browser.tabs.sendMessage(tabId, { type: "SHOW_UI" });
+          } catch (err: any) {
+            console.error("[Narravo] Failed to show miniwindow:", err.message);
+            // Tab may not have content script yet; try injecting and retry once
+            try {
+              await ensureContentScriptLoaded(tabId);
+              await browser.tabs.sendMessage(tabId, { type: "SHOW_UI" });
+            } catch (retryErr: any) {
+              console.error("[Narravo] Retry show miniwindow failed:", retryErr.message);
+            }
+          }
+        }
+        await chrome.runtime.sendMessage({
+          type: "PLAY",
+          text,
+          settings: {
+            voice: settings.voice,
+            rate: settings.rate,
+            pitch: settings.pitch,
+          },
+          credentials: {
+            azureKey: settings.azureKey,
+            azureRegion: settings.azureRegion,
+          },
+        });
+      } catch (error: any) {
+        console.error("TTS offscreen error:", error);
+        await showNotification("TTS Error", error.message);
       }
+    } else {
+      // Firefox fallback: use content script for playback
+      if (tabId == null) return;
+      await processTTSViaContentScript(text, tabId, settings);
+    }
+  }
 
-      // Ensure content script is ready
+  async function sendAudioControl(
+    action: "PAUSE" | "RESUME" | "STOP" | "REPLAY"
+  ) {
+    if (supportsOffscreen) {
+      try {
+        await chrome.runtime.sendMessage({ type: action });
+      } catch (err) {
+        console.error(`Control ${action} failed:`, err);
+      }
+    } else if (activeTabId) {
+      try {
+        await browser.tabs.sendMessage(activeTabId, {
+          type: `${action}_AUDIO`,
+        });
+      } catch {
+        // Content script might not be loaded
+      }
+    }
+  }
+
+  // Legacy content-script-based TTS for Firefox/MV2
+  async function processTTSViaContentScript(
+    text: string,
+    tabId: number,
+    settings: any
+  ) {
+    try {
       await ensureContentScriptLoaded(tabId);
 
       // Stop previous audio
@@ -139,11 +308,11 @@ export default defineBackground(() => {
         credentials: {
           azureKey: settings.azureKey,
           azureRegion: settings.azureRegion,
-        }
+        },
       });
     } catch (error: any) {
       console.error("TTS process error:", error);
-      if (!error.message.includes('No tab with id')) {
+      if (!error.message?.includes("No tab with id")) {
         await showNotification("TTS Error", error.message);
       }
     }
@@ -153,14 +322,16 @@ export default defineBackground(() => {
   browser.commands.onCommand.addListener(async (command) => {
     console.log(`[Narravo] Command received: ${command}`);
 
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    const tabs = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
     const activeTab = tabs[0];
     if (!activeTab?.id) return;
 
     if (command === "read-selected") {
       try {
-        // Ensure content script is ready (it's already injected via manifest,
-        // but we verify it's responsive before sending messages)
+        // Ensure content script is ready
         await ensureContentScriptLoaded(activeTab.id);
 
         // Ask the content script for the current selection
@@ -170,7 +341,7 @@ export default defineBackground(() => {
 
         const selectedText = response?.text;
         if (selectedText && selectedText.trim()) {
-          await processTTS(selectedText.trim(), activeTab.id);
+          await processTTSAudio(selectedText.trim(), activeTab.id);
         } else {
           await showNotification("Narravo", "No text selected to read.");
         }
@@ -178,19 +349,24 @@ export default defineBackground(() => {
         console.error("Failed to get selection via shortcut:", err);
       }
     } else if (command === "stop-audio") {
-      try {
-        await browser.tabs.sendMessage(activeTab.id, { type: "STOP_AUDIO" });
-      } catch (err) {
-        // Content script might not be loaded
-      }
+      await sendAudioControl("STOP");
     }
   });
 
   // Context menu click handler
   browser.contextMenus.onClicked.addListener(async (info, tab) => {
-    if (info.menuItemId === "translate-selected-text" && info.selectionText && tab?.id) {
+    if (
+      info.menuItemId === "translate-selected-text" &&
+      info.selectionText &&
+      tab?.id
+    ) {
       console.log("Processing context menu TTS");
-      await processTTS(info.selectionText, tab.id);
+      try {
+        await ensureContentScriptLoaded(tab.id);
+        await processTTSAudio(info.selectionText, tab.id);
+      } catch (err: any) {
+        console.error("Context menu TTS failed:", err);
+      }
     }
   });
 
@@ -210,7 +386,9 @@ export default defineBackground(() => {
   async function ensureContentScriptLoaded(tabId: number) {
     try {
       try {
-        const response = await browser.tabs.sendMessage(tabId, { type: "PING" });
+        const response = await browser.tabs.sendMessage(tabId, {
+          type: "PING",
+        });
         if (response && response.pong) {
           return true;
         }
@@ -225,35 +403,46 @@ export default defineBackground(() => {
         throw new Error(`Tab ${tabId} no longer exists.`);
       }
 
-      if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('moz-extension://')) {
-        throw new Error('Cannot inject into system pages');
+      if (
+        !tab ||
+        !tab.url ||
+        tab.url.startsWith("chrome://") ||
+        tab.url.startsWith("chrome-extension://") ||
+        tab.url.startsWith("moz-extension://")
+      ) {
+        throw new Error("Cannot inject into system pages");
       }
 
       if (tab.discarded) {
-        throw new Error('Tab is discarded');
+        throw new Error("Tab is discarded");
       }
 
       try {
         // In WXT, content script output is content.js by default
         await browser.scripting.executeScript({
           target: { tabId: tabId },
-          files: ['/content-scripts/content.js']
+          files: ["/content-scripts/content.js"],
         });
       } catch (scriptError: any) {
-        if (scriptError.message.includes('No tab with id') || scriptError.message.includes('Invalid tab ID')) {
+        if (
+          scriptError.message.includes("No tab with id") ||
+          scriptError.message.includes("Invalid tab ID")
+        ) {
           throw new Error(`Tab ${tabId} was closed.`);
         }
         throw scriptError;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       try {
-        const response = await browser.tabs.sendMessage(tabId, { type: "PING" });
+        const response = await browser.tabs.sendMessage(tabId, {
+          type: "PING",
+        });
         if (response && response.pong) {
           return true;
         }
-        throw new Error('Content script not responding');
+        throw new Error("Content script not responding");
       } catch (verifyError: any) {
         throw new Error(`Injection failed: ${verifyError.message}`);
       }

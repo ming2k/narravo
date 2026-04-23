@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import styled from "styled-components";
-import { AudioService } from "../../services/audioService";
 import { getSettings } from "../../utils/settingsStorage";
-import { createTTSStream } from "../../utils/audioPlayer";
 import { Button, Badge, Icon, TextArea } from "../../components/ui";
 import "../../styles/theme.css";
 
-const PopupContainer = styled.div.attrs({ className: 'popup' })`
+const PopupContainer = styled.div.attrs({ className: "popup" })`
   background: var(--bg-surface);
   min-height: 100%;
   display: flex;
@@ -15,7 +13,7 @@ const PopupContainer = styled.div.attrs({ className: 'popup' })`
   box-sizing: border-box;
 `;
 
-const Header = styled.header.attrs({ className: 'popup__header' })`
+const Header = styled.header.attrs({ className: "popup__header" })`
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -23,18 +21,18 @@ const Header = styled.header.attrs({ className: 'popup__header' })`
   border-bottom: 1px solid var(--border-color);
 `;
 
-const LogoWrap = styled.div.attrs({ className: 'popup__logo-wrap' })`
+const LogoWrap = styled.div.attrs({ className: "popup__logo-wrap" })`
   display: flex;
   align-items: center;
   gap: 8px;
 `;
 
-const LogoImg = styled.img.attrs({ className: 'popup__logo-img' })`
+const LogoImg = styled.img.attrs({ className: "popup__logo-img" })`
   width: 18px;
   height: 18px;
 `;
 
-const Title = styled.h1.attrs({ className: 'popup__title' })`
+const Title = styled.h1.attrs({ className: "popup__title" })`
   font-size: 15px;
   font-weight: 600;
   margin: 0;
@@ -42,7 +40,9 @@ const Title = styled.h1.attrs({ className: 'popup__title' })`
   color: var(--text-primary);
 `;
 
-const StyledTextArea = styled(TextArea).attrs({ className: 'popup__input-area' })`
+const StyledTextArea = styled(TextArea).attrs({
+  className: "popup__input-area",
+})`
   min-height: 110px;
   resize: none;
   width: calc(100% - 32px);
@@ -50,14 +50,14 @@ const StyledTextArea = styled(TextArea).attrs({ className: 'popup__input-area' }
   flex: 1;
 `;
 
-const Actions = styled.div.attrs({ className: 'popup__actions' })`
+const Actions = styled.div.attrs({ className: "popup__actions" })`
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 16px 16px;
 `;
 
-const InitContainer = styled.div.attrs({ className: 'popup__init' })`
+const InitContainer = styled.div.attrs({ className: "popup__init" })`
   padding: 24px 16px;
   text-align: center;
   display: flex;
@@ -66,7 +66,7 @@ const InitContainer = styled.div.attrs({ className: 'popup__init' })`
   gap: 16px;
 `;
 
-const InitText = styled.p.attrs({ className: 'popup__init-text' })`
+const InitText = styled.p.attrs({ className: "popup__init-text" })`
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0;
@@ -76,16 +76,21 @@ function Popup() {
   const [text, setText] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [status, setStatus] = useState("");
-  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean>(true);
+  const [onboardingCompleted, setOnboardingCompleted] =
+    useState<boolean>(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [audioService] = useState(() => new AudioService());
 
   useEffect(() => {
     const loadState = async () => {
       try {
-        const storage = (typeof browser !== 'undefined' ? browser : (window as any).chrome).storage.local;
+        const storage = (
+          typeof browser !== "undefined"
+            ? browser
+            : (window as any).chrome
+        ).storage.local;
         const result = await storage.get(["onboardingCompleted", "lastInput"]);
-        if (result.onboardingCompleted !== undefined) setOnboardingCompleted(result.onboardingCompleted);
+        if (result.onboardingCompleted !== undefined)
+          setOnboardingCompleted(result.onboardingCompleted);
         if (result.lastInput) setText(result.lastInput);
       } catch (err) {
         console.error("Popup: Failed to load state", err);
@@ -94,12 +99,50 @@ function Popup() {
       }
     };
     loadState();
+
+    // Query current audio state from background
+    const queryState = async () => {
+      try {
+        const res = await browser.runtime.sendMessage({
+          type: "GET_AUDIO_STATE",
+        });
+        if (res) {
+          updateStatusFromState(res.state);
+        }
+      } catch {
+        // Ignore
+      }
+    };
+    queryState();
+
+    // Listen for audio state updates from offscreen/background
+    const listener = (msg: any) => {
+      if (msg.type === "UPDATE_UI_STATE" || msg.type === "AUDIO_STATE") {
+        updateStatusFromState(msg.state);
+      }
+    };
+    browser.runtime.onMessage.addListener(listener);
+    return () => {
+      browser.runtime.onMessage.removeListener(listener);
+    };
   }, []);
+
+  function updateStatusFromState(state: string) {
+    if (state === "playing" || state === "loading") {
+      setIsSpeaking(true);
+      setStatus(state === "loading" ? "Loading..." : "Reading...");
+    } else {
+      setIsSpeaking(false);
+      setStatus("");
+    }
+  }
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setText(newText);
-    const storage = (typeof browser !== 'undefined' ? browser : (window as any).chrome).storage.local;
+    const storage = (
+      typeof browser !== "undefined" ? browser : (window as any).chrome
+    ).storage.local;
     storage.set({ lastInput: newText });
   };
 
@@ -114,12 +157,10 @@ function Popup() {
         setIsSpeaking(false);
         return;
       }
-      const credentials = { azureKey: settings.azureKey, azureRegion: settings.azureRegion };
-      const voiceSettings = { voice: settings.voice, rate: settings.rate, pitch: settings.pitch };
-      const response = await createTTSStream(text.trim(), voiceSettings, credentials);
-      await audioService.playStreamingResponse(response, settings.rate || 1);
-      setStatus("");
-      setIsSpeaking(false);
+      await browser.runtime.sendMessage({
+        type: "PLAY_AUDIO",
+        text: text.trim(),
+      });
     } catch (error: any) {
       console.error("Popup speak error:", error);
       setStatus("Error: " + (error.message || "Playback failed"));
@@ -128,14 +169,20 @@ function Popup() {
   };
 
   const handleStop = async () => {
-    try { await audioService.stopAudio(); } catch (e) {}
+    try {
+      await browser.runtime.sendMessage({ type: "STOP_AUDIO" });
+    } catch {}
     setIsSpeaking(false);
     setStatus("");
   };
 
   const openOptions = () => {
-    const runtime = (typeof browser !== 'undefined' ? browser : (window as any).chrome).runtime;
-    const tabs = (typeof browser !== 'undefined' ? browser : (window as any).chrome).tabs;
+    const runtime = (
+      typeof browser !== "undefined" ? browser : (window as any).chrome
+    ).runtime;
+    const tabs = (
+      typeof browser !== "undefined" ? browser : (window as any).chrome
+    ).tabs;
     tabs.create({ url: runtime.getURL("/options.html") });
   };
 
@@ -146,7 +193,9 @@ function Popup() {
       <PopupContainer>
         <InitContainer>
           <InitText>Initialization Required</InitText>
-          <Button onClick={openOptions} icon="settings">Setup</Button>
+          <Button onClick={openOptions} icon="settings">
+            Setup
+          </Button>
         </InitContainer>
       </PopupContainer>
     );
@@ -187,26 +236,19 @@ function Popup() {
             Read Aloud
           </Button>
         ) : (
-          <Button
-            variant="danger"
-            onClick={handleStop}
-            icon="stop"
-            fullWidth
-          >
+          <Button variant="danger" onClick={handleStop} icon="stop" fullWidth>
             Stop
           </Button>
         )}
-        {status && (
-          <Badge variant="primary">{status}</Badge>
-        )}
+        {status && <Badge variant="primary">{status}</Badge>}
       </Actions>
     </PopupContainer>
   );
 }
 
 const container = document.getElementById("root");
-if (container && !container.hasAttribute('data-rendered')) {
-  container.setAttribute('data-rendered', 'true');
+if (container && !container.hasAttribute("data-rendered")) {
+  container.setAttribute("data-rendered", "true");
   const root = ReactDOM.createRoot(container);
   root.render(<Popup />);
 }

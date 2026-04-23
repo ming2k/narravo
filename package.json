@@ -1,6 +1,6 @@
 {
   "name": "narravo",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "A refined text-to-speech solution using Azure's Neural TTS API.",
   "scripts": {

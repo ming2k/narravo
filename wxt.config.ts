@@ -4,7 +4,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   srcDir: 'src',
   modules: ['@wxt-dev/module-react'],
-  manifest: {
+  manifest: ({ browser }) => ({
     name: '__MSG_extName__',
     description: '__MSG_extensionDescription__',
     default_locale: 'en',
@@ -14,6 +14,7 @@ export default defineConfig({
       'notifications',
       'activeTab',
       'scripting',
+      ...(browser === 'firefox' ? [] : ['offscreen']),
     ],
     host_permissions: ['https://*.tts.speech.microsoft.com/*'],
     commands: {
@@ -44,7 +45,7 @@ export default defineConfig({
         matches: ['<all_urls>'],
       },
     ],
-  },
+  }),
   hooks: {
     'build:manifestGenerated': (_wxt, manifest) => {
       // Remove declarative content_scripts to avoid broad host permissions.
