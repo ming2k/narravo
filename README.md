@@ -17,6 +17,8 @@ A powerful, minimalist browser extension for text-to-speech using Azure's Speech
 - [⚙️ Configuration Guide](docs/configuration.md)
 - [🛠️ Development Guide](docs/development.md)
 - [🧪 Testing & Verification](docs/testing.md)
+- [📦 Packaging Guide](docs/packaging.md)
+- [🌐 Distribution Guide](docs/distribution.md)
 
 ## Tech Stack
 

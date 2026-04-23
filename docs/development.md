@@ -54,3 +54,10 @@ Debugging a browser extension is different from a standard web app because logic
 All verification procedures, including manual testing checklists and automated Vitest testing instructions, have been moved to:
 
 - [Testing & Verification Guide](testing.md)
+
+## Packaging & Distribution
+
+When you are ready to ship a release:
+
+- [Packaging Guide](packaging.md) — Build and ZIP the extension for Chrome and Firefox.
+- [Distribution Guide](distribution.md) — Publish to the Chrome Web Store and Firefox Add-ons.
