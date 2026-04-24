@@ -10,7 +10,6 @@ export default defineContentScript({
     // State
     let miniWindow: any = null;
     let audioService: AudioService | null = null;
-    let currentAudio: HTMLAudioElement | null = null;
     let lastRequest: any = null;
     let abortController: AbortController | null = null;
     let state = "idle"; // idle | loading | playing | paused | ended | error
@@ -39,7 +38,6 @@ export default defineContentScript({
       // Reset state
       miniWindow = null;
       audioService = null;
-      currentAudio = null;
       lastRequest = null;
       abortController = null;
       state = "idle";
@@ -47,7 +45,9 @@ export default defineContentScript({
 
     function getAudioService() {
       if (!audioService) {
-        audioService = new AudioService();
+        audioService = new AudioService({
+          onStateChange: (newState) => setState(newState),
+        });
       }
       return audioService;
     }
@@ -158,7 +158,6 @@ export default defineContentScript({
         }
       }
 
-      currentAudio = null;
       setState("idle");
     }
 
@@ -170,8 +169,6 @@ export default defineContentScript({
       }
       abortController = new AbortController();
 
-      setState("loading");
-
       try {
         const response = await createTTSStream(
           request.text,
@@ -180,19 +177,10 @@ export default defineContentScript({
           abortController.signal
         );
 
-        const playPromise = player.playStreamingResponse(
+        await player.playStreamingResponse(
           response,
           request.settings.rate || 1
         );
-
-        // Attach event listeners
-        await attachAudioListeners(player);
-
-        await playPromise;
-
-        if (state === "playing" || state === "loading") {
-          setState("ended");
-        }
       } catch (err: any) {
         if (err.name === "AbortError") {
           setState("idle");
@@ -214,18 +202,8 @@ export default defineContentScript({
     async function replayFromCache() {
       const player = getAudioService();
 
-      setState("loading");
-
       try {
-        const replayPromise = player.replayFromCache();
-
-        await attachAudioListeners(player);
-
-        await replayPromise;
-
-        if (state === "playing" || state === "loading") {
-          setState("ended");
-        }
+        await player.replayFromCache();
       } catch (err: any) {
         if (err.name === "AbortError") {
           setState("idle");
@@ -234,58 +212,6 @@ export default defineContentScript({
         console.error("[Narravo] Replay failed:", err);
         setState("error");
       }
-    }
-
-    async function attachAudioListeners(player: AudioService, retries = 5) {
-      for (let i = 0; i < retries; i++) {
-        const audio = player.getCurrentAudio();
-        if (audio && audio !== currentAudio) {
-          currentAudio = audio;
-
-          audio.addEventListener("play", () => setState("playing"));
-          audio.addEventListener("playing", () => setState("playing"));
-          audio.addEventListener("pause", () => {
-            if (audio.ended) {
-              setState("ended");
-            } else {
-              setState("paused");
-            }
-          });
-          audio.addEventListener("ended", () => setState("ended"));
-          audio.addEventListener("waiting", () => {
-            if (state !== "ended") setState("loading");
-          });
-          audio.addEventListener("error", () => {
-            if (state === "loading" || state === "playing") {
-              setState("error");
-            }
-          });
-          audio.addEventListener("timeupdate", () => {
-            // Fallback end detection for Firefox
-            const duration = audio.duration;
-            if (
-              Number.isFinite(duration) &&
-              duration > 0 &&
-              audio.currentTime >= duration - 0.1
-            ) {
-              if (state !== "ended") {
-                setState("ended");
-              }
-            }
-          });
-
-          // Set initial state based on audio element
-          if (audio.ended) {
-            setState("ended");
-          } else if (!audio.paused) {
-            setState("playing");
-          }
-
-          return true;
-        }
-        await new Promise((r) => setTimeout(r, 20));
-      }
-      return false;
     }
 
     // Message handler

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.3] - 2026-04-24
+
+### Changed
+
+- **AudioService state management refactored** — Playback state (`idle`/`loading`/`playing`/`paused`/`ended`/`error`) is now managed internally by `AudioService` via a constructor `onStateChange` callback. Event listeners are attached synchronously when the `<audio>` element is created, eliminating the race condition that caused cached replay to display a red error border.
+
+### Fixed
+
+- **Cached replay error state** — Replaying audio from the local cache no longer incorrectly triggers the red error border and exclamation button. The previous `setTimeout(..., 50)` delay for attaching event listeners has been removed; state transitions are now immediate and reliable.
+
 ## [1.0.2] - 2026-04-23
 
 ### Added

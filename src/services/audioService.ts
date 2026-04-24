@@ -5,7 +5,15 @@
  * - True streaming: audio plays while downloading
  * - Pause/resume during playback
  * - Cached replay without re-fetching
+ * - Built-in playback state broadcasting via onStateChange callback
  */
+
+export type AudioPlaybackState = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
+
+export interface AudioServiceOptions {
+  onStateChange?: (state: AudioPlaybackState, hasCache: boolean) => void;
+}
+
 export class AudioService {
   private audio: HTMLAudioElement | null = null;
   private abortController: AbortController | null = null;
@@ -14,10 +22,23 @@ export class AudioService {
   private cachedChunks: Uint8Array[] = [];
   private cachedRate: number = 1;
 
+  // State management
+  private onStateChange?: (state: AudioPlaybackState, hasCache: boolean) => void;
+  private stateListeners: Array<{ event: string; handler: EventListener }> = [];
+
+  constructor(options?: AudioServiceOptions) {
+    this.onStateChange = options?.onStateChange;
+  }
+
+  private emitState(state: AudioPlaybackState): void {
+    this.onStateChange?.(state, this.hasCachedAudio());
+  }
+
   async stopAudio(): Promise<void> {
     this.abortController?.abort();
     this.abortController = null;
     this.cleanup();
+    this.emitState('idle');
   }
 
   pauseAudio(): void {
@@ -75,6 +96,8 @@ export class AudioService {
     this.cachedRate = rate;
     this.abortController = new AbortController();
 
+    this.emitState('loading');
+
     if (!window.MediaSource) {
       return this.playWithBlob(response, rate, onProgress);
     }
@@ -92,6 +115,8 @@ export class AudioService {
 
     await this.stopAudio();
     this.abortController = new AbortController();
+
+    this.emitState('loading');
 
     const blob = new Blob(this.cachedChunks, { type: 'audio/webm; codecs="opus"' });
     return this.playBlob(blob, this.cachedRate, this.abortController.signal);
@@ -187,7 +212,14 @@ export class AudioService {
         // Start playback once we have some data
         if (!playStarted && audio.readyState >= 2) {
           playStarted = true;
-          await audio.play().catch(() => {});
+          try {
+            await audio.play();
+          } catch (err: any) {
+            if (err.name === 'NotAllowedError') {
+              this.emitState('idle');
+            }
+            // Continue buffering; user may interact later
+          }
         }
       }
 
@@ -199,7 +231,13 @@ export class AudioService {
 
       // Ensure playback started
       if (!playStarted && audio.readyState >= 2) {
-        await audio.play().catch(() => {});
+        try {
+          await audio.play();
+        } catch (err: any) {
+          if (err.name === 'NotAllowedError') {
+            this.emitState('idle');
+          }
+        }
       }
     } finally {
       reader.releaseLock();
@@ -325,8 +363,10 @@ export class AudioService {
         cleanup();
         signal.removeEventListener('abort', onAbort);
         if (err.name === 'NotAllowedError') {
+          this.emitState('idle');
           reject(new Error('Autoplay blocked. Click on the page and try again.'));
         } else {
+          this.emitState('error');
           reject(err);
         }
       });
@@ -334,15 +374,60 @@ export class AudioService {
   }
 
   private createAudio(src: string, rate: number): HTMLAudioElement {
+    this.cleanup();
     const audio = new Audio();
     audio.className = 'narravo-audio';
     audio.src = src;
     audio.playbackRate = rate;
+    this.attachAudioListeners(audio);
     this.audio = audio;
     return audio;
   }
 
+  private attachAudioListeners(audio: HTMLAudioElement): void {
+    this.removeAudioListeners();
+
+    const handlePlay = () => this.emitState('playing');
+    const handlePlaying = () => this.emitState('playing');
+    const handlePause = () => this.emitState(audio.ended ? 'ended' : 'paused');
+    const handleEnded = () => this.emitState('ended');
+    const handleWaiting = () => this.emitState('loading');
+    const handleError = () => this.emitState('error');
+    const handleTimeUpdate = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.1) {
+        this.emitState('ended');
+      }
+    };
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('playing', handlePlaying);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('error', handleError);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+
+    this.stateListeners = [
+      { event: 'play', handler: handlePlay },
+      { event: 'playing', handler: handlePlaying },
+      { event: 'pause', handler: handlePause },
+      { event: 'ended', handler: handleEnded },
+      { event: 'waiting', handler: handleWaiting },
+      { event: 'error', handler: handleError },
+      { event: 'timeupdate', handler: handleTimeUpdate },
+    ];
+  }
+
+  private removeAudioListeners(): void {
+    if (!this.audio) return;
+    for (const { event, handler } of this.stateListeners) {
+      this.audio.removeEventListener(event, handler);
+    }
+    this.stateListeners = [];
+  }
+
   private cleanup(): void {
+    this.removeAudioListeners();
     if (this.audio) {
       const url = this.audio.src;
       this.audio.pause();

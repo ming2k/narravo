@@ -28,6 +28,10 @@ Use this document when filling out the **Privacy practices** tab on the Chrome W
 
 > Narravo uses `storage.local` to persist user preferences (Azure Speech API key, region, voice, rate, pitch) and onboarding state entirely on the user's device. This data is never synced to external servers and is never shared with third parties.
 
+### `offscreen` (Chrome only)
+
+> Narravo uses the `offscreen` permission to create a dedicated offscreen document that plays synthesized audio independently of the web page's content script. This is required because Chrome's Manifest V3 extension architecture does not allow audio playback (via `HTMLAudioElement` or `MediaSource`) inside a service worker. The offscreen document is created only when audio playback starts and is closed when playback stops. It does not access any web page content, browsing history, or user data beyond the audio stream received from the Azure Speech API.
+
 ### `notifications`
 
 > Narravo uses notifications to display brief, non-intrusive alerts when required configuration is missing (e.g., Azure credentials not yet entered) or when a playback error occurs. No personal data is included in notification messages.
@@ -58,6 +62,7 @@ Use the following statement when certifying compliance with the Developer Progra
 | **activeTab** | Identify the current tab when a keyboard shortcut is pressed to request the selected text from the content script. |
 | **contextMenus** | Provide the "Read selected text" right-click menu item on text selections. |
 | **scripting** | Re-inject the local content script as a fallback when it becomes unresponsive after page refresh. |
+| **offscreen** | Create a dedicated offscreen document for audio playback in Chrome MV3 (required because service workers cannot play audio). |
 | **storage** | Store user settings (API key, region, voice, rate, pitch) and onboarding state locally. |
 | **notifications** | Alert the user about missing configuration or playback errors. |
 | **Host permission** | Send selected text to `*.tts.speech.microsoft.com` and receive synthesized audio. |

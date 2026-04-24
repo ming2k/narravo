@@ -1,40 +1,15 @@
 import { AudioService } from "../../services/audioService";
 import { createTTSStream } from "../../utils/audioPlayer";
 
-const audioService = new AudioService();
-let currentAudio: HTMLAudioElement | null = null;
-
-function broadcastState(state: string, hasCache: boolean = false) {
-  try {
-    chrome.runtime.sendMessage({ type: "AUDIO_STATE", state, hasCache });
-  } catch {
-    // Ignore
-  }
-}
-
-function attachAudioListeners() {
-  const audio = audioService.getCurrentAudio();
-  if (!audio || audio === currentAudio) return;
-  currentAudio = audio;
-
-  audio.addEventListener("play", () => broadcastState("playing", audioService.hasCachedAudio()));
-  audio.addEventListener("playing", () => broadcastState("playing", audioService.hasCachedAudio()));
-  audio.addEventListener("pause", () => {
-    broadcastState(audio.ended ? "ended" : "paused", audioService.hasCachedAudio());
-  });
-  audio.addEventListener("ended", () => broadcastState("ended", audioService.hasCachedAudio()));
-  audio.addEventListener("waiting", () => broadcastState("loading", audioService.hasCachedAudio()));
-  audio.addEventListener("error", () => broadcastState("error", audioService.hasCachedAudio()));
-  audio.addEventListener("timeupdate", () => {
-    if (
-      Number.isFinite(audio.duration) &&
-      audio.duration > 0 &&
-      audio.currentTime >= audio.duration - 0.1
-    ) {
-      broadcastState("ended", audioService.hasCachedAudio());
+const audioService = new AudioService({
+  onStateChange: (state, hasCache) => {
+    try {
+      chrome.runtime.sendMessage({ type: "AUDIO_STATE", state, hasCache });
+    } catch {
+      // Ignore
     }
-  });
-}
+  },
+});
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   (async () => {
@@ -46,32 +21,19 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
       case "PLAY": {
         try {
-          broadcastState("loading");
-          await audioService.stopAudio();
-          currentAudio = null;
-
           const response = await createTTSStream(
             request.text,
             request.settings,
             request.credentials
           );
-
-          const playPromise = audioService.playStreamingResponse(
+          await audioService.playStreamingResponse(
             response,
             request.settings.rate || 1
           );
-
-          // Give AudioService a moment to create the <audio> element
-          setTimeout(() => attachAudioListeners(), 50);
-
-          await playPromise;
-          // Playback finished or was aborted
+          // Playback finished or was aborted; state already broadcast by AudioService
         } catch (err: any) {
-          if (err?.name === "AbortError") {
-            broadcastState("idle");
-          } else {
+          if (err?.name !== "AbortError") {
             console.error("[Offscreen] Play error:", err);
-            broadcastState("error", audioService.hasCachedAudio());
           }
         }
         sendResponse({ success: true });
@@ -88,7 +50,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         try {
           await audioService.resumeAudio();
         } catch (err) {
-          broadcastState("error", audioService.hasCachedAudio());
+          console.error("[Offscreen] Resume failed:", err);
         }
         sendResponse({ success: true });
         break;
@@ -97,24 +59,23 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       case "STOP": {
         await audioService.stopAudio();
         audioService.clearCache();
-        currentAudio = null;
-        broadcastState("idle", false);
+        // Explicitly broadcast idle with no cache since clearCache happened after stopAudio
+        try {
+          chrome.runtime.sendMessage({ type: "AUDIO_STATE", state: "idle", hasCache: false });
+        } catch {
+          // Ignore
+        }
         sendResponse({ success: true });
         break;
       }
 
       case "REPLAY": {
         try {
-          broadcastState("loading", true);
-          const replayPromise = audioService.replayFromCache();
-          setTimeout(() => attachAudioListeners(), 50);
-          await replayPromise;
+          await audioService.replayFromCache();
+          // Playback finished or was aborted; state already broadcast by AudioService
         } catch (err: any) {
-          if (err?.name === "AbortError") {
-            broadcastState("idle");
-          } else {
+          if (err?.name !== "AbortError") {
             console.error("[Offscreen] Replay error:", err);
-            broadcastState("error", audioService.hasCachedAudio());
           }
         }
         sendResponse({ success: true });

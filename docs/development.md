@@ -34,18 +34,23 @@ Debugging a browser extension is different from a standard web app because logic
 - **Where**: Open `chrome://extensions`, find Narravo, and click on **"service worker"** or **"background page"**.
 - **What**: This is where you see logs from `background.ts`, network requests to Azure, and context menu events.
 
-### 2. Popup UI
+### 2. Offscreen Document (Chrome only)
+- **Where**: Open `chrome://extensions`, find Narravo, click on **"service worker"**, then in DevTools go to the **"Application"** panel → **"Frames"** → **"offscreen"** (or inspect the offscreen page via `chrome-extension://<id>/offscreen.html`).
+- **What**: This is where the actual `<audio>` element lives. Look here for `AudioService` logs, MediaSource errors, and playback state transitions.
+- **Tip**: If cached replay shows a red border or exclamation icon in the mini window but you hear audio, the offscreen document's `AUDIO_STATE` broadcast is the first place to check.
+
+### 3. Popup UI
 - **Where**: Right-click the extension icon in the toolbar and select **"Inspect"**.
 - **Tip**: If the popup closes, the inspector might close. In Chrome, you can keep the inspector open by clicking the "device" icon or inspecting it as a standalone tab via its URL (found in the inspector).
 
-### 3. Content Scripts
+### 4. Content Scripts
 - **Where**: Open the **DevTools (F12)** on any regular website.
 - **Context**: In the "Console" tab, look for the dropdown that says `top` and change it to `Narravo` (or the extension's ID) to access the extension's environment. Logs from `content.ts` will appear here.
 
-### 4. Options & Onboarding Pages
+### 5. Options & Onboarding Pages
 - These are standard HTML pages. Just right-click anywhere on the page and select **"Inspect"**.
 
-### 5. WXT Dev Server Logs
+### 6. WXT Dev Server Logs
 - Check your **terminal** where `npm run dev` is running. WXT will report build errors, manifest issues, and file system events there.
 
 
