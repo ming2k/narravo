@@ -374,16 +374,13 @@ export function GeneralSettings({ settings, onChange, onSave, groupedVoices, voi
     }
   }, [isPlaying, audioService, settings]);
 
-  if (voicesError) {
-    return (
-      <div>
-        <Alert variant="error">{voicesError}</Alert>
-      </div>
-    );
-  }
-
   return (
     <div>
+      {voicesError && (
+        <div style={{ marginBottom: '20px' }}>
+          <Alert variant="error">{voicesError}</Alert>
+        </div>
+      )}
       <Grid>
         <Column>
           <ColumnTitle>Azure Speech Service</ColumnTitle>

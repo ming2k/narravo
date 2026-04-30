@@ -81,83 +81,59 @@ export default defineBackground(() => {
   // Create context menu when extension starts
   createContextMenu();
 
-  // Auto-complete onboarding in development if credentials are in ENV
-  if (import.meta.env.DEV) {
-    const envKey = import.meta.env.VITE_AZURE_SPEECH_KEY;
-    const envRegion = import.meta.env.VITE_AZURE_REGION;
+  // Update badge based on current settings on startup
+  getSettings().then((settings) => {
+    updateBadge(settings);
+  });
 
-    if (envKey && envRegion) {
-      console.log(
-        "[Narravo] Dev mode: Found Azure credentials in environment variables"
-      );
-      getSettings().then(async (settings) => {
-        if (!settings.azureKey || !settings.azureRegion) {
-          await browser.storage.local.set({
-            settings: {
-              ...settings,
-              azureKey: settings.azureKey || envKey,
-              azureRegion: settings.azureRegion || envRegion,
-            },
-            onboardingCompleted: true,
-          });
-          console.log(
-            "[Narravo] Dev mode: Auto-initialized settings and completed onboarding"
-          );
-        } else {
-          // Even if settings already exist, ensure onboarding is marked completed
-          const { onboardingCompleted } = await browser.storage.local.get(
-            "onboardingCompleted"
-          );
-          if (!onboardingCompleted) {
-            await browser.storage.local.set({ onboardingCompleted: true });
-            console.log("[Narravo] Dev mode: Marked onboarding as completed");
-          }
-        }
-      });
+  // Listen for settings changes to update badge
+  browser.storage.local.onChanged.addListener((changes) => {
+    if (changes.settings) {
+      const newSettings = changes.settings.newValue;
+      updateBadge(newSettings);
+    }
+  });
+
+  function updateBadge(settings: any) {
+    try {
+      const actionAPI = browser.action || browser.browserAction;
+      if (!actionAPI) return;
+
+      if (settings?.azureKey && settings?.azureRegion) {
+        actionAPI.setBadgeText({ text: "" });
+      } else {
+        actionAPI.setBadgeText({ text: "!" });
+        actionAPI.setBadgeBackgroundColor({ color: "#F59E0B" });
+      }
+    } catch (error: any) {
+      console.log("Could not update badge:", error.message);
     }
   }
 
-  // Keep the onInstalled listener for other initialization tasks
+  // Keep the onInstalled listener for initialization tasks
   browser.runtime.onInstalled.addListener(async (details) => {
     await createContextMenu();
 
     if (details.reason === "install") {
-      const initialSettings = {
-        ...defaultSettings,
-        azureKey: (import.meta.env.VITE_AZURE_SPEECH_KEY as string) || "",
-        azureRegion: (import.meta.env.VITE_AZURE_REGION as string) || "",
-      };
-
       await browser.storage.local.set({
-        settings: initialSettings,
+        settings: defaultSettings,
         onboardingCompleted: false,
       });
 
-      // Set badge to indicate setup needed if no Azure credentials
-      if (!initialSettings.azureKey || !initialSettings.azureRegion) {
-        try {
-          const actionAPI = browser.action || browser.browserAction;
-          if (actionAPI) {
-            actionAPI.setBadgeText({ text: "!" });
-            actionAPI.setBadgeBackgroundColor({ color: "#F59E0B" });
-          }
-        } catch (error: any) {
-          console.log("Could not set badge:", error.message);
+      // Set badge to indicate setup needed
+      try {
+        const actionAPI = browser.action || browser.browserAction;
+        if (actionAPI) {
+          actionAPI.setBadgeText({ text: "!" });
+          actionAPI.setBadgeBackgroundColor({ color: "#F59E0B" });
         }
+      } catch (error: any) {
+        console.log("Could not set badge:", error.message);
       }
 
-      const isDevelopmentWithCreds =
-        import.meta.env.DEV &&
-        initialSettings.azureKey &&
-        initialSettings.azureRegion;
-
-      if (isDevelopmentWithCreds) {
-        await browser.storage.local.set({ onboardingCompleted: true });
-      } else {
-        browser.tabs.create({
-          url: browser.runtime.getURL("/onboarding.html"),
-        });
-      }
+      browser.tabs.create({
+        url: browser.runtime.getURL("/onboarding.html"),
+      });
     }
   });
 

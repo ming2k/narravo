@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.4] - 2026-04-30
+
+### Security
+
+- **Remove hard-coded Azure credentials from build output** — Eliminated all `import.meta.env.VITE_AZURE_SPEECH_KEY` / `VITE_AZURE_REGION` references from the source. Vite's compile-time string replacement was silently embedding the developer's Azure key into every production bundle and distributed ZIP. Credentials are now read exclusively from `browser.storage.local` at runtime.
+
+### Fixed
+
+- **Options page blocked by voice-loading error** — When the stored Azure key was invalid or expired, the options UI rendered only an error Alert and hid the API-key input fields, preventing users from correcting their credentials. The error is now displayed non-destructively at the top of the form while keeping all inputs accessible.
+- **Setup badge "!" persists after configuration** — The toolbar icon's orange exclamation badge was set on install but never cleared. It now auto-removes as soon as both `azureKey` and `azureRegion` are saved, and re-appears if either is removed.
+
 ## [1.0.3] - 2026-04-24
 
 ### Changed

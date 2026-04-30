@@ -1,5 +1,5 @@
 /**
- * Gets Azure credentials from settings object, browser storage, or environment variables
+ * Gets Azure credentials from settings object or browser storage
  */
 export async function getAzureCredentials(settings: any = null) {
   // First try from passed settings object
@@ -24,9 +24,8 @@ export async function getAzureCredentials(settings: any = null) {
     console.warn("Failed to get credentials from browser storage:", error);
   }
 
-  // Finally fallback to environment variables
   return {
-    azureKey: (import.meta.env.VITE_AZURE_SPEECH_KEY as string) || "",
-    azureRegion: (import.meta.env.VITE_AZURE_REGION as string) || "",
+    azureKey: "",
+    azureRegion: "",
   };
 }
