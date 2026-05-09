@@ -113,13 +113,49 @@ const SliderStack = styled.div.attrs({ className: 'options-tab-general__slider-s
   gap: 20px;
 `;
 
+const ToggleRow = styled.label.attrs({ className: 'options-tab-general__toggle-row' })`
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  margin-top: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  cursor: pointer;
+`;
+
+const ToggleInput = styled.input.attrs({ className: 'options-tab-general__toggle-input' })`
+  margin: 3px 0 0 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--system-blue);
+  flex-shrink: 0;
+`;
+
+const ToggleText = styled.span.attrs({ className: 'options-tab-general__toggle-text' })`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+`;
+
+const ToggleTitle = styled.span.attrs({ className: 'options-tab-general__toggle-title' })`
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+`;
+
+const ToggleDescription = styled.span.attrs({ className: 'options-tab-general__toggle-description' })`
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+`;
+
 const Actions = styled.div.attrs({ className: 'options-tab-general__actions' })`
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border-color);
 `;
 
 const SearchWrapper = styled.div.attrs({ className: 'options-tab-general__search-wrapper' })`
@@ -543,6 +579,25 @@ export function GeneralSettings({ settings, onChange, onSave, groupedVoices, voi
             valueDisplay={`${Number(settings.pitch).toFixed(1)}x`}
           />
         </SliderStack>
+      </BottomSection>
+
+      <BottomSection>
+        <SectionHeader>Interface</SectionHeader>
+        <ToggleRow htmlFor="showMiniWindow">
+          <ToggleInput
+            id="showMiniWindow"
+            name="showMiniWindow"
+            type="checkbox"
+            checked={Boolean(settings.showMiniWindow)}
+            onChange={onChange}
+          />
+          <ToggleText>
+            <ToggleTitle>Show page mini window</ToggleTitle>
+            <ToggleDescription>
+              Adds a floating control to the current page when reading starts. Playback and popup controls keep working when this is off.
+            </ToggleDescription>
+          </ToggleText>
+        </ToggleRow>
       </BottomSection>
 
       <Actions>

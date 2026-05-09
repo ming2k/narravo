@@ -8,6 +8,7 @@ export interface Settings {
   pitch: number;
   // UI state
   showKey?: boolean;
+  showMiniWindow?: boolean;
 }
 
 export const defaultSettings: Settings = {
@@ -17,6 +18,7 @@ export const defaultSettings: Settings = {
   rate: 1.0,
   pitch: 1.0,
   showKey: false,
+  showMiniWindow: false,
 };
 
 export function isSettings(obj: unknown): obj is Settings {

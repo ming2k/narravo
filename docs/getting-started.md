@@ -29,6 +29,11 @@ Follow these steps to get your development environment ready for contributing to
    cp .env.example .env
    # Add your VITE_AZURE_SPEECH_KEY and VITE_AZURE_REGION
    ```
+   To skip onboarding in development, also set:
+   ```env
+   VITE_NARRAVO_DEV_AUTO_SETUP=true
+   ```
+   Restart the dev command after editing `.env`, then reload the unpacked extension.
 
 3. **Run for Development**:
    - **Chrome**: `npm run dev`

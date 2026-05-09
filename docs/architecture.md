@@ -28,10 +28,10 @@ The extension follows a modular architecture centered around WXT's entrypoints s
 ### Chrome MV3 (Offscreen Document)
 
 1. **User Action**: User selects text and clicks "Read selected text" in the context menu (or presses `Alt+Shift+L`).
-2. **Background**: Captures the request, fetches credentials, ensures the offscreen document exists, and sends `SHOW_UI` to the active tab's content script.
-3. **Content Script**: Receives `SHOW_UI`, renders the mini window, and awaits state updates.
-4. **Background**: Sends `PLAY` to the offscreen document with the text, voice settings, and Azure credentials.
-5. **Offscreen**: Calls `TTSService` → `createStreamingResponse` → `AudioService.playStreamingResponse()`.
+2. **Background**: Captures the request, fetches credentials, ensures the offscreen document exists, and sends `PLAY` to the offscreen document with the text, voice settings, and Azure credentials.
+3. **Offscreen**: Acknowledges the command immediately and plays audio in the background.
+4. **Optional Mini Window**: If enabled in settings, the background tries to show the page mini window. Failure to inject the page UI does not block playback.
+5. **Offscreen**: Reuses the previous completed audio when `text`, voice, rate, pitch, region, and output format match exactly; otherwise it calls `TTSService` → `createStreamingResponse` → `AudioService.playStreamingResponse()`.
 6. **Playback**: `AudioService` uses the `MediaSource` API (or Blob fallback) to play the stream as it downloads. Playback state (`loading` → `playing` → `ended`/`error`) is broadcast automatically via the `onStateChange` callback.
 7. **State Sync**: The offscreen document sends `AUDIO_STATE` messages to the background, which forwards them as `UPDATE_UI_STATE` to the content script. The mini window updates its border color, button icon, and visibility accordingly.
 8. **Controls**: Clicking the mini-window button sends `PAUSE_AUDIO` / `RESUME_AUDIO` / `REPLAY_AUDIO` / `STOP_AUDIO` to the background, which relays them to the offscreen document as `PAUSE` / `RESUME` / `REPLAY` / `STOP`.

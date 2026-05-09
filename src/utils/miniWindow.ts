@@ -25,6 +25,26 @@ export interface MiniWindowControls {
 const STYLE_ID = "narravo-mini-window-style";
 const STORAGE_KEY = "tts-window-position";
 
+function createSvgIcon(svgString: string): SVGSVGElement {
+  const template = document.createElement("template");
+  template.innerHTML = svgString.trim();
+  const svg = template.content.firstElementChild;
+  if (!(svg instanceof SVGSVGElement)) {
+    throw new Error("Invalid mini window icon");
+  }
+  return svg;
+}
+
+function getRuntimeAssetUrl(path: string): string | null {
+  const runtime =
+    (globalThis as any).browser?.runtime ?? (globalThis as any).chrome?.runtime;
+  try {
+    return runtime?.getURL?.(path) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const ICONS = {
   play: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill="currentColor"/></svg>`,
   pause: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/></svg>`,
@@ -109,10 +129,19 @@ function injectStyles(): void {
     }
 
     #tts-mini-window .tts-logo {
+      width: 20px;
+      height: 20px;
+      display: block;
+      border-radius: 5px;
+      transition: opacity 0.2s;
+    }
+
+    #tts-mini-window .tts-logo-fallback {
       color: var(--system-blue, #2563EB);
       font-weight: 700;
       font-size: 14px;
-      transition: opacity 0.2s;
+      line-height: 20px;
+      text-align: center;
     }
 
     .tts-wave-container {
@@ -181,6 +210,15 @@ function injectStyles(): void {
 
     #tts-mini-window button.is-accent {
       color: var(--system-blue, #2563EB);
+    }
+
+    #tts-mini-window button svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+      flex-shrink: 0;
+      color: currentColor;
+      pointer-events: none;
     }
 
     #tts-mini-window button.is-loading svg {
@@ -260,31 +298,38 @@ export function createMiniWindow(): MiniWindowControls {
   const logoContainer = document.createElement("div");
   logoContainer.className = "tts-logo-container";
 
-  const logoText = document.createElement("div");
-  logoText.className = "tts-logo";
-  logoText.textContent = "N";
+  const logoUrl = getRuntimeAssetUrl("assets/icons/icon-32.png");
+  const logo = logoUrl ? document.createElement("img") : document.createElement("div");
+  logo.className = logoUrl ? "tts-logo" : "tts-logo tts-logo-fallback";
+  if (logo instanceof HTMLImageElement) {
+    logo.src = logoUrl;
+    logo.alt = "";
+    logo.draggable = false;
+  } else {
+    logo.textContent = "N";
+  }
 
   const waveContainer = document.createElement("div");
   waveContainer.className = "tts-wave-container";
-  waveContainer.innerHTML = `
-    <div class="tts-wave-bar"></div>
-    <div class="tts-wave-bar"></div>
-    <div class="tts-wave-bar"></div>
-  `;
+  for (let i = 0; i < 3; i++) {
+    const bar = document.createElement("div");
+    bar.className = "tts-wave-bar";
+    waveContainer.appendChild(bar);
+  }
 
-  logoContainer.append(logoText, waveContainer);
+  logoContainer.append(logo, waveContainer);
 
   // Control button
   const replayButton = document.createElement("button");
   replayButton.type = "button";
   replayButton.className = "tts-control";
-  replayButton.innerHTML = ICONS.play;
+  replayButton.appendChild(createSvgIcon(ICONS.play));
 
   // Close button
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "tts-close";
-  closeButton.innerHTML = ICONS.close;
+  closeButton.appendChild(createSvgIcon(ICONS.close));
   closeButton.title = "Close";
 
   container.append(logoContainer, replayButton, closeButton);
@@ -357,7 +402,7 @@ export function createMiniWindow(): MiniWindowControls {
   const updateStatus = ({ state, canReplay }: MiniWindowStatusArgs) => {
     const config = getButtonConfig(state, canReplay);
 
-    replayButton.innerHTML = config.icon;
+    replayButton.replaceChildren(createSvgIcon(config.icon));
     replayButton.title = config.title;
     replayButton.disabled = config.disabled;
     replayButton.classList.toggle("is-accent", config.accent && !config.disabled);

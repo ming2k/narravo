@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.5] - 2026-05-09
+
+### Added
+
+- **Development auto setup** — `npm run dev` can now apply Azure credentials from `.env` and skip onboarding when `VITE_NARRAVO_DEV_AUTO_SETUP=true`.
+- **Optional page mini window** — Added a `showMiniWindow` setting and an Options → Interface toggle so the page floating control is opt-in instead of required for playback.
+- **Last-request audio cache** — Reuses the previous completed audio when text, voice, rate, pitch, region, and output format match exactly, avoiding duplicate Azure synthesis calls.
+
+### Changed
+
+- **Background-first playback flow** — Chrome MV3 playback now starts in the offscreen document first; mini-window injection is a non-blocking enhancement.
+- **Options layout** — Moved interface behavior settings into a dedicated Interface section and removed the extra divider above the action buttons.
+
+### Fixed
+
+- **Context menu reliability** — Right-click "Read selected text" no longer depends on content-script injection before playback and now avoids Chrome callback/Promise races when registering context menus.
+- **Chrome messaging compatibility** — Runtime message listeners now use `sendResponse` + `return true`, fixing false "content scripts not responding" failures.
+- **Mini window rendering** — The mini window now uses the extension icon instead of the placeholder logo and renders SVG control icons reliably.
+- **Offscreen lifecycle** — Offscreen document creation now clears stale creation promises after failures.
+
 ## [1.0.4] - 2026-04-30
 
 ### Security

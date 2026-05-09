@@ -13,6 +13,20 @@ WXT uses Vite under the hood, so environment variables must be prefixed with `VI
    VITE_AZURE_REGION=westus
    ```
 
+### Development Auto Setup
+
+During local development, you can let `npm run dev` apply the `.env` credentials to extension storage and skip onboarding:
+
+```env
+VITE_AZURE_SPEECH_KEY=your_key_here
+VITE_AZURE_REGION=westus
+VITE_NARRAVO_DEV_AUTO_SETUP=true
+```
+
+This only runs in dev builds and only when `VITE_NARRAVO_DEV_AUTO_SETUP` is explicitly set to `true`. Placeholder or missing Azure values are ignored.
+
+Restart `npm run dev` after changing `.env`, then reload the unpacked extension in Chrome so the background service worker sees the new values.
+
 ## Azure Setup
 
 1. **Create a Resource**: Go to the [Azure Portal](https://portal.azure.com) and create a "Speech" resource.
@@ -32,6 +46,7 @@ interface Settings {
   rate: number;
   pitch: number;
   showKey: boolean;
+  showMiniWindow: boolean;
 }
 ```
 

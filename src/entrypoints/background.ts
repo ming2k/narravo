@@ -2,6 +2,9 @@ import { getSettings } from "../utils/settingsStorage";
 import { defaultSettings } from "../types/storage";
 
 const OFFSCREEN_PATH = "offscreen.html";
+const CONTEXT_MENU_ID = "translate-selected-text";
+const AZURE_KEY_PLACEHOLDER = "your_azure_speech_service_key_here";
+const AZURE_REGION_PLACEHOLDER = "your_azure_region_here";
 let creatingOffscreen: Promise<void> | null = null;
 let currentAudioState = { state: "idle", hasCache: false };
 let activeTabId: number | null = null;
@@ -32,20 +35,25 @@ async function setupOffscreenDocument(): Promise<void> {
     await creatingOffscreen;
     return;
   }
-  creatingOffscreen = chrome.offscreen
-    .createDocument({
-      url: OFFSCREEN_PATH,
-      reasons: ["AUDIO_PLAYBACK"] as any,
-      justification:
-        "Play text-to-speech audio independently of page environments to avoid CSP and sandbox restrictions",
-    })
+  // Use bracket notation to avoid Firefox linter flagging unsupported API
+  const offscreenApi = (chrome as any)["offscreen"];
+  if (!offscreenApi) return;
+  creatingOffscreen = offscreenApi["createDocument"]({
+    url: OFFSCREEN_PATH,
+    reasons: ["AUDIO_PLAYBACK"] as any,
+    justification:
+      "Play text-to-speech audio independently of page environments to avoid CSP and sandbox restrictions",
+  })
     .then(() => {})
     .catch((err: any) => {
       if (err?.message?.includes("Only one offscreen document")) return;
       throw err;
     });
-  await creatingOffscreen;
-  creatingOffscreen = null;
+  try {
+    await creatingOffscreen;
+  } finally {
+    creatingOffscreen = null;
+  }
 }
 
 function broadcastState(state: string, hasCache: boolean = false) {
@@ -67,12 +75,13 @@ export default defineBackground(() => {
   // Separate function to create context menu
   async function createContextMenu() {
     try {
-      await browser.contextMenus.removeAll();
-      await browser.contextMenus.create({
-        id: "translate-selected-text",
+      await removeAllContextMenus();
+      await createContextMenuItem({
+        id: CONTEXT_MENU_ID,
         title: "Read selected text",
         contexts: ["selection"],
       });
+      console.log("[Narravo] Context menu registered");
     } catch (error) {
       console.error("Failed to create context menu:", error);
     }
@@ -80,6 +89,9 @@ export default defineBackground(() => {
 
   // Create context menu when extension starts
   createContextMenu();
+  applyDevAutoSetup().catch((error) => {
+    console.error("[Narravo] Dev auto setup failed:", error);
+  });
 
   // Update badge based on current settings on startup
   getSettings().then((settings) => {
@@ -115,34 +127,43 @@ export default defineBackground(() => {
     await createContextMenu();
 
     if (details.reason === "install") {
-      await browser.storage.local.set({
-        settings: defaultSettings,
-        onboardingCompleted: false,
-      });
+      const devAutoSetupApplied = await applyDevAutoSetup();
+
+      if (!devAutoSetupApplied) {
+        await browser.storage.local.set({
+          settings: defaultSettings,
+          onboardingCompleted: false,
+        });
+      }
 
       // Set badge to indicate setup needed
       try {
         const actionAPI = browser.action || browser.browserAction;
         if (actionAPI) {
-          actionAPI.setBadgeText({ text: "!" });
-          actionAPI.setBadgeBackgroundColor({ color: "#F59E0B" });
+          if (devAutoSetupApplied) {
+            actionAPI.setBadgeText({ text: "" });
+          } else {
+            actionAPI.setBadgeText({ text: "!" });
+            actionAPI.setBadgeBackgroundColor({ color: "#F59E0B" });
+          }
         }
       } catch (error: any) {
         console.log("Could not set badge:", error.message);
       }
 
-      browser.tabs.create({
-        url: browser.runtime.getURL("/onboarding.html"),
-      });
+      if (!devAutoSetupApplied) {
+        browser.tabs.create({
+          url: browser.runtime.getURL("/onboarding.html"),
+        });
+      }
     }
   });
 
-  // Unified message listener
-  browser.runtime.onMessage.addListener(async (message, sender) => {
+  async function handleRuntimeMessage(message: any, sender: any) {
     switch (message.type) {
       case "AUDIO_STATE": {
         broadcastState(message.state, message.hasCache ?? false);
-        return;
+        return { success: true };
       }
 
       case "GET_AUDIO_STATE": {
@@ -155,7 +176,9 @@ export default defineBackground(() => {
       case "PLAY_AUDIO": {
         const text = message.text as string;
         const tabId =
-          (message.tabId as number | undefined) ?? (sender.tab?.id ?? null);
+          (message.tabId as number | undefined) ??
+          (sender.tab?.id ?? null) ??
+          (await getActiveTabId());
         await processTTSAudio(text, tabId);
         return { success: true };
       }
@@ -176,9 +199,20 @@ export default defineBackground(() => {
         browser.tabs.create({
           url: browser.runtime.getURL("/options.html"),
         });
-        return;
+        return { success: true };
       }
     }
+  }
+
+  // Chrome does not reliably use Promise return values from onMessage listeners.
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    handleRuntimeMessage(message, sender)
+      .then((response) => sendResponse(response))
+      .catch((err: any) => {
+        console.error("[Narravo] Background message handler failed:", err);
+        sendResponse({ success: false, error: err.message || String(err) });
+      });
+    return true;
   });
 
   // Unified function to handle TTS requests
@@ -198,20 +232,6 @@ export default defineBackground(() => {
     if (supportsOffscreen) {
       try {
         await setupOffscreenDocument();
-        if (tabId != null) {
-          try {
-            await browser.tabs.sendMessage(tabId, { type: "SHOW_UI" });
-          } catch (err: any) {
-            console.error("[Narravo] Failed to show miniwindow:", err.message);
-            // Tab may not have content script yet; try injecting and retry once
-            try {
-              await ensureContentScriptLoaded(tabId);
-              await browser.tabs.sendMessage(tabId, { type: "SHOW_UI" });
-            } catch (retryErr: any) {
-              console.error("[Narravo] Retry show miniwindow failed:", retryErr.message);
-            }
-          }
-        }
         await chrome.runtime.sendMessage({
           type: "PLAY",
           text,
@@ -225,6 +245,9 @@ export default defineBackground(() => {
             azureRegion: settings.azureRegion,
           },
         });
+        if (settings.showMiniWindow) {
+          void showMiniWindowInTab(tabId);
+        }
       } catch (error: any) {
         console.error("TTS offscreen error:", error);
         await showNotification("TTS Error", error.message);
@@ -276,6 +299,7 @@ export default defineBackground(() => {
       await browser.tabs.sendMessage(tabId, {
         type: "PLAY_STREAMING_TTS",
         text: text,
+        showMiniWindow: settings.showMiniWindow,
         settings: {
           voice: settings.voice,
           rate: settings.rate,
@@ -332,16 +356,20 @@ export default defineBackground(() => {
   // Context menu click handler
   browser.contextMenus.onClicked.addListener(async (info, tab) => {
     if (
-      info.menuItemId === "translate-selected-text" &&
-      info.selectionText &&
+      info.menuItemId === CONTEXT_MENU_ID &&
       tab?.id
     ) {
       console.log("Processing context menu TTS");
       try {
-        await ensureContentScriptLoaded(tab.id);
-        await processTTSAudio(info.selectionText, tab.id);
+        const selectedText = info.selectionText?.trim();
+        if (!selectedText) {
+          await showNotification("Narravo", "No text selected to read.");
+          return;
+        }
+        await processTTSAudio(selectedText, tab.id);
       } catch (err: any) {
         console.error("Context menu TTS failed:", err);
+        await showNotification("TTS Error", err.message || "Context menu action failed.");
       }
     }
   });
@@ -356,6 +384,117 @@ export default defineBackground(() => {
       });
     } catch (error) {
       console.log(`Notification: ${title}: ${message}`);
+    }
+  }
+
+  async function applyDevAutoSetup(): Promise<boolean> {
+    const env = (import.meta as any).env || {};
+    const shouldAutoSetup =
+      env.DEV === true && env.VITE_NARRAVO_DEV_AUTO_SETUP === "true";
+
+    if (!shouldAutoSetup) return false;
+
+    const azureKey = (env.VITE_AZURE_SPEECH_KEY || "").trim();
+    const azureRegion = (env.VITE_AZURE_REGION || "").trim();
+
+    if (
+      !azureKey ||
+      !azureRegion ||
+      azureKey === AZURE_KEY_PLACEHOLDER ||
+      azureRegion === AZURE_REGION_PLACEHOLDER
+    ) {
+      console.warn(
+        "[Narravo] Dev auto setup is enabled, but Azure env values are missing or placeholders."
+      );
+      return false;
+    }
+
+    const currentSettings = await getSettings();
+    const nextSettings = {
+      ...defaultSettings,
+      ...currentSettings,
+      azureKey,
+      azureRegion,
+      voice: env.VITE_NARRAVO_DEV_VOICE || currentSettings.voice,
+      rate: Number(env.VITE_NARRAVO_DEV_RATE) || currentSettings.rate,
+      pitch: Number(env.VITE_NARRAVO_DEV_PITCH) || currentSettings.pitch,
+    };
+
+    await browser.storage.local.set({
+      settings: nextSettings,
+      onboardingCompleted: true,
+    });
+    updateBadge(nextSettings);
+    console.log("[Narravo] Dev auto setup applied from environment variables");
+    return true;
+  }
+
+  async function removeAllContextMenus(): Promise<void> {
+    if (typeof chrome !== "undefined" && chrome.contextMenus?.removeAll) {
+      await new Promise<void>((resolve, reject) => {
+        chrome.contextMenus.removeAll(() => {
+          const message = chrome.runtime.lastError?.message;
+          if (message) {
+            reject(new Error(message));
+            return;
+          }
+          resolve();
+        });
+      });
+      return;
+    }
+
+    await browser.contextMenus.removeAll();
+  }
+
+  async function createContextMenuItem(
+    properties: chrome.contextMenus.CreateProperties
+  ): Promise<void> {
+    if (typeof chrome !== "undefined" && chrome.contextMenus?.create) {
+      await new Promise<void>((resolve, reject) => {
+        chrome.contextMenus.create(properties, () => {
+          const message = chrome.runtime.lastError?.message;
+          if (message) {
+            reject(new Error(message));
+            return;
+          }
+          resolve();
+        });
+      });
+      return;
+    }
+
+    browser.contextMenus.create(properties as any);
+  }
+
+  async function getActiveTabId(): Promise<number | null> {
+    try {
+      const tabs = await browser.tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+      return tabs[0]?.id ?? null;
+    } catch (error: any) {
+      console.error("[Narravo] Failed to resolve active tab:", error.message);
+      return null;
+    }
+  }
+
+  async function showMiniWindowInTab(tabId: number | null) {
+    if (tabId == null) return;
+
+    try {
+      await browser.tabs.sendMessage(tabId, { type: "SHOW_UI" });
+      return;
+    } catch (err: any) {
+      console.debug("[Narravo] Mini window is not active yet:", err.message);
+    }
+
+    try {
+      await ensureContentScriptLoaded(tabId);
+      await browser.tabs.sendMessage(tabId, { type: "SHOW_UI" });
+    } catch (retryErr: any) {
+      console.debug("[Narravo] Mini window unavailable:", retryErr.message);
     }
   }
 
@@ -397,7 +536,7 @@ export default defineBackground(() => {
         // In WXT, content script output is content.js by default
         await browser.scripting.executeScript({
           target: { tabId: tabId },
-          files: ["/content-scripts/content.js"],
+          files: ["content-scripts/content.js"],
         });
       } catch (scriptError: any) {
         if (

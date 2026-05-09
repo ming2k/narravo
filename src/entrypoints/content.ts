@@ -11,6 +11,7 @@ export default defineContentScript({
     let miniWindow: any = null;
     let audioService: AudioService | null = null;
     let lastRequest: any = null;
+    let lastRequestCacheKey: string | null = null;
     let abortController: AbortController | null = null;
     let state = "idle"; // idle | loading | playing | paused | ended | error
     let offscreenHasCache = false;
@@ -39,8 +40,21 @@ export default defineContentScript({
       miniWindow = null;
       audioService = null;
       lastRequest = null;
+      lastRequestCacheKey = null;
       abortController = null;
       state = "idle";
+    }
+
+    function createRequestCacheKey(request: any): string {
+      return JSON.stringify({
+        version: 1,
+        text: request.text,
+        voice: request.settings?.voice || "",
+        rate: Number(request.settings?.rate ?? 1),
+        pitch: Number(request.settings?.pitch ?? 1),
+        azureRegion: request.credentials?.azureRegion || "",
+        outputFormat: "webm-24khz-16bit-mono-opus",
+      });
     }
 
     function getAudioService() {
@@ -214,8 +228,7 @@ export default defineContentScript({
       }
     }
 
-    // Message handler
-    browser.runtime.onMessage.addListener(async (request) => {
+    async function handleRuntimeMessage(request: any) {
       switch (request.type) {
         case "PING":
           return { pong: true };
@@ -227,6 +240,17 @@ export default defineContentScript({
         case "SHOW_UI": {
           console.log("[Narravo] SHOW_UI received");
           showMiniWindow();
+          try {
+            const current = await browser.runtime.sendMessage({
+              type: "GET_AUDIO_STATE",
+            });
+            if (current?.state) {
+              offscreenHasCache = current.hasCache ?? offscreenHasCache;
+              setState(current.state);
+            }
+          } catch {
+            // Ignore state sync errors; future broadcasts will update the UI.
+          }
           return { success: true };
         }
 
@@ -243,16 +267,31 @@ export default defineContentScript({
         // --- Firefox fallback: direct playback ---
         case "PLAY_STREAMING_TTS": {
           try {
-            showMiniWindow();
-            await new Promise((r) => setTimeout(r, 50));
+            if (request.showMiniWindow) {
+              showMiniWindow();
+              await new Promise((r) => setTimeout(r, 50));
+            }
 
-            lastRequest = {
+            const nextRequest = {
               text: request.text,
               settings: request.settings,
               credentials: request.credentials,
             };
+            const cacheKey = createRequestCacheKey(nextRequest);
+            const player = getAudioService();
 
-            await playFromRequest(lastRequest);
+            lastRequest = nextRequest;
+
+            if (lastRequestCacheKey === cacheKey && player.hasCachedAudio()) {
+              await replayFromCache();
+              return { success: true };
+            }
+
+            lastRequestCacheKey = null;
+            await playFromRequest(nextRequest);
+            if (state === "ended" && player.hasCachedAudio()) {
+              lastRequestCacheKey = cacheKey;
+            }
             return { success: true };
           } catch (err: any) {
             if (err.name === "NotAllowedError") {
@@ -264,8 +303,7 @@ export default defineContentScript({
 
         case "STOP_AUDIO": {
           await stopAudio();
-          lastRequest = null;
-          if (audioService) {
+          if (!lastRequestCacheKey && audioService) {
             audioService.clearCache();
           }
           hideMiniWindow();
@@ -307,6 +345,17 @@ export default defineContentScript({
           return { success: true };
         }
       }
+    }
+
+    // Chrome does not reliably use Promise return values from onMessage listeners.
+    browser.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+      handleRuntimeMessage(request)
+        .then((response) => sendResponse(response))
+        .catch((err: any) => {
+          console.error("[Narravo] Message handler failed:", err);
+          sendResponse({ success: false, error: err.message || String(err) });
+        });
+      return true;
     });
 
     // Cleanup on page exit

@@ -45,12 +45,19 @@ export default defineConfig({
         matches: ['<all_urls>'],
       },
     ],
+    browser_specific_settings: {
+      gecko: {
+        id: '@narravo-tts',
+        data_collection_permissions: {
+          required: ['websiteContent'],
+        },
+      },
+    },
   }),
   hooks: {
     'build:manifestGenerated': (_wxt, manifest) => {
-      // Remove declarative content_scripts to avoid broad host permissions.
-      // The content script is injected on-demand via activeTab + scripting
-      // when the user triggers a keyboard shortcut or context menu.
+      // Keep page access on-demand. The background script injects this file
+      // after a user action grants activeTab permission.
       delete (manifest as any).content_scripts;
     },
   },
